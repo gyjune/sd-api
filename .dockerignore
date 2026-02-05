@@ -1,0 +1,6 @@
+.git
+.github
+go.sum
+*.md
+*.log
+.DS_Store
