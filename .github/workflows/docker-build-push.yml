@@ -6,42 +6,34 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. 拉取代码
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. 安装Go环境
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
 
-      # 3. 生成Go依赖文件（自动创建go.mod/go.sum）
       - name: Generate Go Dependencies
         run: |
           go mod init sd-tv-live
           go mod tidy
 
-      # 4. 编译Go程序（多架构）
       - name: Build Go Binary (Multi-Arch)
         run: |
-          # 编译amd64
+          # 编译后将文件放在当前目录（确保路径正确）
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o sd-tv-live-amd64
-          # 编译arm64
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -o sd-tv-live-arm64
 
-      # 5. 配置Docker
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 6. 登录Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      # 7. 构建并推送多架构镜像（直接基于二进制文件，无需Dockerfile）
       - name: Build & Push Multi-Arch Image
         uses: docker/build-push-action@v5
         with:
@@ -49,14 +41,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/sd-tv-live:latest
-          # 直接复制二进制文件到scratch镜像
-          build-args: |
-            ARCH=amd64
-          # 多架构镜像配置
-          provenance: false
-          # 镜像内容：scratch + 对应架构的二进制文件
+          # 内联Dockerfile（根据架构选择对应二进制文件）
           dockerfile: |
             FROM scratch
+            # 根据TARGETARCH选择二进制文件
             COPY sd-tv-live-${TARGETARCH} /sd-tv-live
             EXPOSE 9003
             CMD ["/sd-tv-live"]
