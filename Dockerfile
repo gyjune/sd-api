@@ -1,12 +1,18 @@
-FROM golang:1.21-alpine
+# 构建阶段（仅用于编译，最终丢弃）
+FROM --platform=$BUILDPLATFORM golang:1.21-alpine AS builder
 WORKDIR /app
-# 安装git（go mod可能需要拉取依赖）
-RUN apk add --no-cache git
-# 复制代码
+# 仅安装必要依赖（git用于拉取go mod依赖，编译后删除）
+RUN apk add --no-cache git && rm -rf /var/cache/apk/*
 COPY . .
-# 强制下载依赖，生成go.sum
-RUN go mod tidy
-# 编译（默认amd64，若需多架构可保留原编译逻辑）
-RUN CGO_ENABLED=0 GOOS=linux go build -o sd-tv-live main.go
+# 编译优化：静态编译+剥离调试信息（大幅减小二进制体积）
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH \
+    go build -ldflags="-w -s" -o sd-tv-live main.go
+
+# 运行阶段（使用最小基础镜像，仅3.3兆）
+FROM scratch  # 空镜像，仅包含二进制文件和必要配置
+# 复制编译好的二进制文件（仅几兆）
+COPY --from=builder /app/sd-tv-live /sd-tv-live
+# 暴露端口（scratch镜像无需额外依赖）
 EXPOSE 9003
-CMD ["./sd-tv-live"]
+# 启动命令
+CMD ["/sd-tv-live"]
