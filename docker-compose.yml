@@ -1,0 +1,24 @@
+version: '3.8'
+services:
+  live-tv:
+    # 构建镜像（基于本地Dockerfile）
+    build: .
+    # 镜像名称（与宝塔构建时一致）
+    image: live-tv:arm
+    # 容器名称（自定义，好记）
+    container_name: live-tv-container
+    # 端口映射（宿主机9003 → 容器9003，不可改容器端口）
+    ports:
+      - "9003:9003"
+    # 环境变量（时区+端口，端口与代码默认一致）
+    environment:
+      - TZ=Asia/Shanghai
+      - PORT=9003
+    # 重启策略（容器崩溃/服务器重启自动启动，生产必配）
+    restart: always
+    # 日志配置（限制大小，避免占满磁盘）
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"  # 单日志文件最大10MB
+        max-file: "3"   # 最多保留3个日志文件
