@@ -1,0 +1,63 @@
+# 工作流名称
+name: Build and Push Docker Image to GitHub Container Registry
+
+# 触发条件：推送到main/master分支时自动执行（可修改为其他分支）
+on:
+  push:
+    branches: [ main, master ]
+  # 可选：手动触发（Actions页面点击Run workflow）
+  workflow_dispatch:
+
+# 工作流任务
+jobs:
+  build-and-push:
+    # 运行环境（GitHub 官方Ubuntu服务器）
+    runs-on: ubuntu-latest
+    # 开启Docker构建x86/ARM跨架构支持
+    permissions:
+      contents: read
+      packages: write  # 允许推送至GitHub Packages
+    steps:
+      # 步骤1：拉取GitHub仓库代码到运行环境
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 步骤2：设置Docker Buildx（支持跨架构构建、镜像推送）
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 步骤3：登录GitHub Container Registry（使用内置GITHUB_TOKEN）
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成的Token，无需手动配置
+
+      # 步骤4：定义镜像标签（镜像名：ghcr.io/用户名/仓库名，标签为latest+提交哈希）
+      - name: Define image tags
+        run: |
+          # 转换为小写（GHCR要求镜像名必须小写）
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_TAG=ghcr.io/${REPO_LOWER}:latest" >> $GITHUB_ENV
+          echo "IMAGE_TAG_SHA=ghcr.io/${REPO_LOWER}:${{ github.sha }}" >> $GITHUB_ENV
+
+      # 步骤5：构建Docker镜像并推送到GitHub Container Registry（适配ARM64/AMD64跨架构）
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          # 构建上下文：仓库根目录（与Dockerfile同目录）
+          context: .
+          # Dockerfile路径：仓库根目录的Dockerfile
+          file: ./Dockerfile
+          # 跨架构构建（适配你的Armbian ARM64+普通AMD服务器）
+          platforms: linux/amd64,linux/arm64
+          # 镜像标签（latest为默认标签，SHA标签用于版本追溯）
+          tags: |
+            ${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_TAG_SHA }}
+          # 推送到GHCR（设为true）
+          push: true
+          # 利用Docker层缓存，加速构建
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
